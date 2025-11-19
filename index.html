@@ -24,7 +24,7 @@
 <body>
 
     <h2>Teachable Machine Audio Model</h2>
-    <button onclick="init()">Start Listening</button>
+    <button id="start-btn">Start Listening</button>
     <div id="label-container"></div>
 
     <!-- Teachable Machine Libraries -->
@@ -39,12 +39,7 @@
         /* -----------------------------------------
             MQTT CONNECTION
         ----------------------------------------- */
-
-        const options = {
-            clean: true,
-            connectTimeout: 4000
-        };
-
+        const options = { clean: true, connectTimeout: 4000 };
         const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", options);
 
         client.on("connect", () => {
@@ -54,7 +49,6 @@
         /* -----------------------------------------
             TEACHABLE MACHINE
         ----------------------------------------- */
-
         const URL = "./my_model/";
 
         async function createModel() {
@@ -78,43 +72,51 @@
             const labelContainer = document.getElementById("label-container");
 
             // Create UI rows for each class
+            labelContainer.innerHTML = "";
             for (let i = 0; i < classLabels.length; i++) {
-                labelContainer.appendChild(document.createElement("div"));
+                const div = document.createElement("div");
+                div.innerHTML = classLabels[i] + ": 0.00";
+                labelContainer.appendChild(div);
             }
 
-            recognizer.listen(result => {
-                const scores = result.scores;
+            try {
+                // Start listening and request mic permission
+                await recognizer.listen(result => {
+                    const scores = result.scores;
 
-                // Update screen
-                for (let i = 0; i < classLabels.length; i++) {
-                    labelContainer.childNodes[i].innerHTML =
-                        classLabels[i] + ": " + scores[i].toFixed(2);
-                }
-
-                // Top result
-                let maxIndex = 0;
-                for (let i = 1; i < scores.length; i++) {
-                    if (scores[i] > scores[maxIndex]) {
-                        maxIndex = i;
+                    for (let i = 0; i < classLabels.length; i++) {
+                        labelContainer.childNodes[i].innerHTML =
+                            classLabels[i] + ": " + scores[i].toFixed(2);
                     }
-                }
 
-                const topLabel = classLabels[maxIndex];
-                const topValue = scores[maxIndex];
+                    // Find top label
+                    let maxIndex = 0;
+                    for (let i = 1; i < scores.length; i++) {
+                        if (scores[i] > scores[maxIndex]) {
+                            maxIndex = i;
+                        }
+                    }
 
-                // If confident, publish
-                if (topValue >= 0.75) {
-                    console.log("Publishing:", topLabel);
-                    client.publish("tm/audio", topLabel);
-                }
+                    const topLabel = classLabels[maxIndex];
+                    const topValue = scores[maxIndex];
 
-            }, {
-                includeSpectrogram: true,
-                probabilityThreshold: 0.75,
-                invokeCallbackOnNoiseAndUnknown: true,
-                overlapFactor: 0.50
-            });
+                    if (topValue >= 0.75) {
+                        console.log("Publishing:", topLabel);
+                        client.publish("tm/audio", topLabel);
+                    }
+                }, {
+                    includeSpectrogram: true,
+                    probabilityThreshold: 0.75,
+                    invokeCallbackOnNoiseAndUnknown: true,
+                    overlapFactor: 0.50
+                });
+            } catch (err) {
+                console.error("Microphone permission denied or not available:", err);
+                alert("Microphone access is required to use this app.");
+            }
         }
+
+        document.getElementById("start-btn").addEventListener("click", init);
 
     </script>
 
